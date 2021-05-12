@@ -21,9 +21,8 @@ type customClaims struct {
 }
 
 // a single looper loop
-func loop(id string, loops int, jwt string) {
-
-	rootURL := "http://ceh-broker-service:9080/broker"
+func loop(id string, loops int, jwt string, done chan int) {
+	rootURL := "https://ceh-broker-stocktrader-dev.devops-dev1-a01ee4194ed985a1e32b1d96fd4ae346-0000.us-east.containers.appdomain.cloud/broker"
 	bearer := "Bearer " + jwt
 
 	req, _ := http.NewRequest("GET", rootURL, nil)
@@ -31,7 +30,6 @@ func loop(id string, loops int, jwt string) {
 	client := &http.Client{}
 
 	response := ""
-
 	for i := 0; i < loops; i++ {
 		req.URL.Path += "/"
 		response += "\n\n1:  GET /broker\n"
@@ -44,11 +42,11 @@ func loop(id string, loops int, jwt string) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		response += fmt.Sprint(body)
+		response += string(body)
 		fmt.Println(response)
 		response = ""
 	}
-
+	done <- 0
 }
 
 // pemToRSA turns a PEM-encoded RSA public key into an rsa.PublicKey value.
@@ -108,9 +106,10 @@ func main() {
 
 	jwt := args[3]
 	looper := ""
+	done := make(chan int)
 	for i := 1; i <= thread; i++ {
 		looper = fmt.Sprintf("%s%d", BASE_ID, count)
-		fmt.Println(looper)
-		go loop(looper, count, jwt)
+		go loop(looper, count, jwt, done)
 	}
+	<-done
 }

@@ -1,8 +1,11 @@
-FROM golang:1.16-alpine
+FROM golang:1.16-alpine as build
 
-COPY . /app
+COPY /src /app
 WORKDIR /app
-RUN go mod init go-looper
-RUN go build -o main main.go
+ENV CGO_ENABLED=0
+RUN go build -o main 
 
-CMD ["main"]
+#CMD ["go", "run", "main.go", "1", "1", "c"]
+FROM scratch
+COPY --from=build /app/main /
+ENTRYPOINT ["./main", "1", "1", "c"]
