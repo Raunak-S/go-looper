@@ -20,6 +20,20 @@ type customClaims struct {
 	jwt.StandardClaims
 }
 
+func request(urlExtension string, step string, client *http.Client, req *http.Request) string {
+	req.URL.Path += urlExtension
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return step + string(body)
+}
+
 // a single looper loop
 func loop(id string, loops int, jwt string, done chan int) {
 	rootURL := "https://ceh-broker-stocktrader-dev.devops-dev1-a01ee4194ed985a1e32b1d96fd4ae346-0000.us-east.containers.appdomain.cloud/broker"
@@ -28,21 +42,17 @@ func loop(id string, loops int, jwt string, done chan int) {
 	req, _ := http.NewRequest("GET", rootURL, nil)
 	req.Header.Add("Authorization", bearer)
 	client := &http.Client{}
+	looperId := "Looper" + id
 
-	response := ""
-	for i := 0; i < loops; i++ {
-		req.URL.Path += "/"
-		response += "\n\n1:  GET /broker\n"
-		resp, err := client.Do(req)
-		if err != nil {
-			log.Fatal(err)
-		}
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			log.Fatal(err)
-		}
-		response += string(body)
+	response := "Thread #" + id
+	for i := 1; i <= loops; i++ {
+		response += ", Iteration #" + fmt.Sprintf("%d", i)
+		response += request("/", "\n\n1:  GET /broker\n", client, req)
+
+		response += request("/"+looperId, "\n\n2:  POST /broker/"+looperId+"\n", client, req)
+
+		response += request("/")
+
 		fmt.Println(response)
 		response = ""
 	}
@@ -102,14 +112,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	BASE_ID := "Looper"
 
 	jwt := args[3]
-	looper := ""
 	done := make(chan int)
 	for i := 1; i <= thread; i++ {
-		looper = fmt.Sprintf("%s%d", BASE_ID, count)
-		go loop(looper, count, jwt, done)
+		go loop(fmt.Sprintf("%d", i), count, jwt, done)
 	}
 	<-done
 }
