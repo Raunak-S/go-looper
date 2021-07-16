@@ -15,13 +15,19 @@ import (
 	"github.com/dgrijalva/jwt-go"
 )
 
+var SYMBOL1 = "IBM"
+var SYMBOL2 = "AAPL"
+var SYMBOL3 = "GOOG"
+var rootURL = "https://ceh-broker-stocktrader.devops-dev1-a01ee4194ed985a1e32b1d96fd4ae346-0000.us-east.containers.appdomain.cloud/broker"
+
 type customClaims struct {
 	Username string `json:"username"`
 	jwt.StandardClaims
 }
 
-func request(urlExtension string, step string, client *http.Client, req *http.Request) string {
-	req.URL.Path += urlExtension
+func request(requestMethod string, urlExtension string, step string, client *http.Client, req *http.Request) string {
+	req.Method = requestMethod
+	req.URL.Path = rootURL + urlExtension
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Fatal(err)
@@ -36,7 +42,6 @@ func request(urlExtension string, step string, client *http.Client, req *http.Re
 
 // a single looper loop
 func loop(id string, loops int, jwt string, done chan int) {
-	rootURL := "https://ceh-broker-stocktrader-dev.devops-dev1-a01ee4194ed985a1e32b1d96fd4ae346-0000.us-east.containers.appdomain.cloud/broker"
 	bearer := "Bearer " + jwt
 
 	req, _ := http.NewRequest("GET", rootURL, nil)
@@ -46,12 +51,36 @@ func loop(id string, loops int, jwt string, done chan int) {
 
 	response := "Thread #" + id
 	for i := 1; i <= loops; i++ {
+		q := req.URL.Query()
 		response += ", Iteration #" + fmt.Sprintf("%d", i)
-		response += request("/", "\n\n1:  GET /broker\n", client, req)
 
-		response += request("/"+looperId, "\n\n2:  POST /broker/"+looperId+"\n", client, req)
-
-		response += request("/")
+		response += request("GET", "/", "\n\n1:  GET /broker\n", client, req)
+		response += request("POST", "/"+looperId, "\n\n2:  POST /broker/"+looperId+"\n", client, req)
+		q.Set("symbol", SYMBOL1)
+		q.Set("shares", "1")
+		req.URL.RawQuery = q.Encode()
+		response += request("PUT", "/"+looperId, "\n\n3:  PUT /broker/"+looperId+"?symbol="+SYMBOL1+"&shares=1\n", client, req)
+		q.Set("symbol", SYMBOL2)
+		q.Set("shares", "2")
+		req.URL.RawQuery = q.Encode()
+		response += request("PUT", "/"+looperId, "\n\n4:  PUT /broker/"+looperId+"?symbol="+SYMBOL2+"&shares=2\n", client, req)
+		q.Set("symbol", SYMBOL3)
+		q.Set("shares", "3")
+		req.URL.RawQuery = q.Encode()
+		response += request("PUT", "/"+looperId, "\n\n5:  PUT /broker/"+looperId+"?symbol="+SYMBOL3+"&shares=3\n", client, req)
+		response += request("GET", "/"+looperId, "\n\n6:  GET /broker/"+looperId+"\n", client, req)
+		response += request("GET", "/", "\n\n7:  GET /broker\n", client, req)
+		q.Set("symbol", SYMBOL1)
+		q.Set("shares", "6")
+		req.URL.RawQuery = q.Encode()
+		response += request("PUT", "/"+looperId, "\n\n8:  PUT /broker/"+looperId+"?symbol="+SYMBOL1+"&shares=6\n", client, req)
+		q.Set("symbol", SYMBOL3)
+		q.Set("shares", "-3")
+		req.URL.RawQuery = q.Encode()
+		response += request("PUT", "/"+looperId, "\n\n9:  PUT /broker/"+looperId+"?symbol="+SYMBOL3+"&shares=-3\n", client, req)
+		response += request("GET", "/"+looperId, "\n\n10: GET /broker/"+looperId+"\n", client, req)
+		response += request("DELETE", "/"+looperId, "\n\n11: DELETE /broker/"+looperId+"\n", client, req)
+		response += request("GET", "/", "\n\n12: GET /broker\n", client, req)
 
 		fmt.Println(response)
 		response = ""
@@ -116,7 +145,10 @@ func main() {
 	jwt := args[3]
 	done := make(chan int)
 	for i := 1; i <= thread; i++ {
+		fmt.Println("Created Thread " + fmt.Sprintf("%d", i))
 		go loop(fmt.Sprintf("%d", i), count, jwt, done)
 	}
-	<-done
+	for i := 0; i < thread; i++ {
+		<-done
+	}
 }
